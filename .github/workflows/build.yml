@@ -676,9 +676,11 @@ jobs:
         run: |
           python3 - <<'PY'
           import os, re
+
           path = 'lib/main.dart'
           if os.path.exists(path):
               src = open(path, 'r', encoding='utf-8').read()
+
               def dedup_const_set(match):
                   prefix = match.group(1)
                   body = match.group(2)
@@ -689,7 +691,8 @@ jobs:
                       if it not in seen:
                           seen.add(it)
                           unique.append(it)
-                  return f"{prefix}\n  {', '.join(unique)},\n}}"
+                  return f"{prefix}\n  {', '.join(unique)},\n}};"
+
               new_src, count = re.subn(
                   r"(static\s+const\s+Set<String>\s+_stop\s*=\s*\{)(.*?)(\};)",
                   dedup_const_set,
@@ -698,7 +701,7 @@ jobs:
               )
               if count > 0 and new_src != src:
                   open(path, 'w', encoding='utf-8').write(new_src)
-                  print(f"Eliminados duplicados en _stop ({count} bloque(s) actualizado(s)).")
+                  print(f"Corregido bloque _stop ({count} bloque(s) actualizado(s)).")
               else:
                   print("No se requirieron cambios en _stop.")
           PY
@@ -802,7 +805,6 @@ jobs:
           path: out/
           retention-days: 1
           if-no-files-found: error
-
       - name: Instrucciones
         run: |
           echo "1) Descarga el artifact 'keystore-temporal' y ábrelo."
