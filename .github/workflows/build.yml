@@ -17,18 +17,48 @@ jobs:
       - name: Localizar raiz de Gradle con Python
         run: |
           python3 -c '
-          import os
+          import os, zipfile
+
           root = os.getcwd()
+
+          # Si hay archivos .zip en el repositorio y aun no se ve el proyecto Gradle, los extrae
+          has_gradle = any(
+              any(f in ("settings.gradle", "settings.gradle.kts", "build.gradle", "build.gradle.kts") for f in files)
+              for _, _, files in os.walk(root)
+          )
+          if not has_gradle:
+              for fname in os.listdir(root):
+                  if fname.lower().endswith(".zip"):
+                      zpath = os.path.join(root, fname)
+                      print(f"Extrayendo archivo ZIP encontrado: {fname}")
+                      with zipfile.ZipFile(zpath, "r") as zf:
+                          zf.extractall(root)
+
+          print("Archivos y carpetas en el repo:")
+          for dirpath, dirnames, filenames in os.walk(root):
+              dirnames[:] = [d for d in dirnames if not d.startswith(".git") and d not in {"build", ".gradle"}]
+              rel = os.path.relpath(dirpath, root)
+              print(" -", "." if rel == "." else rel, "->", filenames)
+
           found = None
           for dirpath, dirnames, filenames in os.walk(root):
-              dirnames[:] = [d for d in dirnames if not d.startswith(".") and d not in {"build", ".gradle"}]
+              dirnames[:] = [d for d in dirnames if not d.startswith(".git") and d not in {"build", ".gradle"}]
               if any(m in filenames for m in ("settings.gradle", "settings.gradle.kts")) or (
                   any(m in filenames for m in ("build.gradle", "build.gradle.kts")) and os.path.isdir(os.path.join(dirpath, "app"))
               ):
                   found = dirpath
                   break
+
+          if not found:
+              for dirpath, dirnames, filenames in os.walk(root):
+                  dirnames[:] = [d for d in dirnames if not d.startswith(".git") and d not in {"build", ".gradle"}]
+                  if any(m in filenames for m in ("build.gradle", "build.gradle.kts")):
+                      found = dirpath
+                      break
+
           if not found:
               raise SystemExit("No se encontro ningun proyecto Gradle en el repositorio.")
+
           with open(os.environ["GITHUB_ENV"], "a") as env:
               env.write(f"GRADLE_DIR={found}\n")
           print(f"Proyecto Gradle detectado en: {found}")
