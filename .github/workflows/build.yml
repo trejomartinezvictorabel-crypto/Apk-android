@@ -21,7 +21,6 @@ jobs:
 
           root = os.getcwd()
 
-          # Si hay archivos .zip en el repositorio y aun no se ve el proyecto Gradle, los extrae
           has_gradle = any(
               any(f in ("settings.gradle", "settings.gradle.kts", "build.gradle", "build.gradle.kts") for f in files)
               for _, _, files in os.walk(root)
@@ -119,7 +118,34 @@ jobs:
         run: gradle -p "$GRADLE_DIR" :app:testDebugUnitTest --no-daemon
       - name: Compilar APK firmado
         run: gradle -p "$GRADLE_DIR" :app:assembleRelease --no-daemon -PvCode=${{ github.run_number }} -PvName=1.0.${{ github.run_number }}
+
+      - name: Empaquetar APK limpio con Python
+        run: |
+          python3 -c '
+          import os, shutil
+
+          gradle_dir = os.environ["GRADLE_DIR"]
+          out_dir = os.path.join(gradle_dir, "app", "build", "outputs", "apk", "release")
+          apks = []
+          for dirpath, _, filenames in os.walk(out_dir):
+              for fn in sorted(filenames):
+                  if fn.lower().endswith(".apk"):
+                      apks.append(os.path.join(dirpath, fn))
+
+          if not apks:
+              raise SystemExit(f"No se encontro ningun APK en {out_dir}")
+
+          chosen = apks[0]
+          dist_dir = os.path.join(os.getcwd(), "dist_apk")
+          os.makedirs(dist_dir, exist_ok=True)
+          dest = os.path.join(dist_dir, "CifraCaja-release.apk")
+          shutil.copy2(chosen, dest)
+          size_mb = os.path.getsize(dest) / (1024 * 1024)
+          print(f"APK copiado desde: {chosen}")
+          print(f"Listo para artefacto en: {dest} ({size_mb:.2f} MB)")
+          '
+
       - uses: actions/upload-artifact@v4
         with:
           name: CifraCaja-apk
-          path: "**/app/build/outputs/apk/release/*.apk"
+          path: dist_apk/CifraCaja-release.apk
