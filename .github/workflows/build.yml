@@ -14,6 +14,26 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: '8.9' }
 
+      - name: Localizar raiz de Gradle con Python
+        run: |
+          python3 -c '
+          import os
+          root = os.getcwd()
+          found = None
+          for dirpath, dirnames, filenames in os.walk(root):
+              dirnames[:] = [d for d in dirnames if not d.startswith(".") and d not in {"build", ".gradle"}]
+              if any(m in filenames for m in ("settings.gradle", "settings.gradle.kts")) or (
+                  any(m in filenames for m in ("build.gradle", "build.gradle.kts")) and os.path.isdir(os.path.join(dirpath, "app"))
+              ):
+                  found = dirpath
+                  break
+          if not found:
+              raise SystemExit("No se encontro ningun proyecto Gradle en el repositorio.")
+          with open(os.environ["GITHUB_ENV"], "a") as env:
+              env.write(f"GRADLE_DIR={found}\n")
+          print(f"Proyecto Gradle detectado en: {found}")
+          '
+
       # Firma persistente: 1) Secret  2) cache  3) generar nueva
       - name: Restaurar keystore desde cache (respaldo)
         id: kscache
@@ -56,8 +76,8 @@ jobs:
 
       - name: Descargar modelo de voz incluido (español, Vosk, Apache-2.0)
         run: |
-          mkdir -p app/src/main/assets/models
-          F=app/src/main/assets/models/vosk-model-small-es-0.42.zip
+          mkdir -p "$GRADLE_DIR/app/src/main/assets/models"
+          F="$GRADLE_DIR/app/src/main/assets/models/vosk-model-small-es-0.42.zip"
           if curl -fL --retry 3 -o "$F" https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip && unzip -tq "$F" >/dev/null; then
             echo "Modelo incluido correctamente."
           else
@@ -66,10 +86,10 @@ jobs:
           fi
 
       - name: Pruebas criptograficas
-        run: gradle :app:testDebugUnitTest --no-daemon
+        run: gradle -p "$GRADLE_DIR" :app:testDebugUnitTest --no-daemon
       - name: Compilar APK firmado
-        run: gradle :app:assembleRelease --no-daemon -PvCode=${{ github.run_number }} -PvName=1.0.${{ github.run_number }}
+        run: gradle -p "$GRADLE_DIR" :app:assembleRelease --no-daemon -PvCode=${{ github.run_number }} -PvName=1.0.${{ github.run_number }}
       - uses: actions/upload-artifact@v4
         with:
           name: CifraCaja-apk
-          path: app/build/outputs/apk/release/*.apk
+          path: "**/app/build/outputs/apk/release/*.apk"
